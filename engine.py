@@ -1,37 +1,19 @@
 import pathlib
 import json
-import platform
 from collections import deque
+
 from google import genai
+
+from config import config
 
 ROOT = pathlib.Path(__file__).resolve().parent
 
 class GoogleTerminalGets:
-    def __init__(self, model_name="gemma-3-27b-it"):
-        self._key = None
+    def __init__(self, model_name: str, api_key: str):
         self._instruct = None
+        self.api_key = api_key
         self.model_name = model_name
-        self.client = genai.Client(api_key=self.key)
-
-    @property
-    def key(self):
-        if self._key is None:
-            self._key = self._key_load()
-        return self._key
-
-    def _key_load(self):
-        home = pathlib.Path.home()
-        if platform.system() == 'Windows':
-            key_path = home / "AppData" / "Roaming" / "gemini" / "key.txt"
-        else:
-            key_path = home / ".config" / "gemini" / "key.txt"
-        
-        key_path.parent.mkdir(parents=True, exist_ok=True)
-
-        if not key_path.exists():
-            key_path.touch()
-            print(f"\033[33mThe key.txt file has been created in {key_path}.\nPlease insert into file your API-key.\033[0m")
-        return key_path.read_text(encoding='utf-8').strip()
+        self.client = genai.Client(api_key=self.api_key)
 
     @property
     def instruct(self):
@@ -54,7 +36,11 @@ class GoogleTerminalGets:
             return response.text
 
         except Exception as e:
-            print(f"\r\033[31m[Error API]: {e}\033[0m\n")
+            error_detail = getattr(e, "message", str(e))
+            print(
+                f"\r\033[31m[Error API]: {error_detail}\033[0m\n"
+                "\nPlease check your .env configuration (API key, model name, and base URL)."
+            )
 
 class ChatMemory:
     def __init__(self, filepath="context.json", max_len=20):
