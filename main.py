@@ -1,6 +1,8 @@
+from google.genai import types
+
 from engine import GoogleTerminalGets
 from engine import ChatMemory
-from google.genai import types
+from config import config
 
 def main():
 
@@ -8,7 +10,10 @@ def main():
     model = None
 
     try:
-        model = GoogleTerminalGets()
+        model = GoogleTerminalGets(
+            model_name=config.llm_model,
+            api_key=config.service_api_key.get_secret_value()            
+        )
         chat = ChatMemory()
 
         instructions = [

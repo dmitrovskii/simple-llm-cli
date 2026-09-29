@@ -1,7 +1,8 @@
 __pycache__/
 *.pyc
-venv/
+
+.venv/
 .env
-test.py
+
 context.json
 config/
