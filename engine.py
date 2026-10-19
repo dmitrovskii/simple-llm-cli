@@ -1,84 +1,121 @@
-import pathlib
 import json
 from collections import deque
+from pathlib import Path
 
-from google import genai
+from openai import OpenAI
 
-from config import config
+class ChatSession:
 
-ROOT = pathlib.Path(__file__).resolve().parent
+    DEFAULT_INSTRUCTION = (
+        "System Instructions:\n"
+        "1. Output plain text only. Do not use Markdown, HTML, or any formatting syntax (no bold, lists, headers, etc.).\n"
+        "2. Respond in the exact language used by the user."
+    )
 
-class GoogleTerminalGets:
-    def __init__(self, model_name: str, api_key: str):
-        self._instruct = None
-        self.api_key = api_key
-        self.model_name = model_name
-        self.client = genai.Client(api_key=self.api_key)
+    def __init__(
+            self, 
+            api_key: str, 
+            base_url: str,
+            model: str, 
+            chat_length: int = 20
+            ) -> None:
+        
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=base_url
+        )
 
-    @property
-    def instruct(self):
-        if self._instruct is None:
-            self._instruct = self._instruct_load()
-        return self._instruct
+        self.content_path = Path(__file__).resolve().parent / "content"
+        self.history_file = self.content_path / "history.json"
+        self.instruction_file = self.content_path / "instruction.txt"
 
-    def _instruct_load(self):
-        file_conf = pathlib.Path(ROOT / 'config' / 'config.txt')
-        file_conf.parent.mkdir(parents=True, exist_ok=True)
-        file_conf.touch(exist_ok=True)
-        return file_conf.read_text(encoding='utf-8') 
+        self.llm_model = model
+        self.maxlen = chat_length
+        self.history = self._history_load()
+        self.instruct = self._instruct_load()
 
-    def ask(self, data: list) -> str:
+
+    def _instruct_load(self) -> str:
+        if not self.instruction_file.exists():
+            self.instruction_file.parent.mkdir(parents=True, exist_ok=True)
+            self.instruction_file.write_text(self.DEFAULT_INSTRUCTION, encoding="utf-8")
+            return self.DEFAULT_INSTRUCTION
+        
+        return self.instruction_file.read_text(encoding="utf-8")
+
+
+    def _history_load(self) -> deque[dict]: 
+        if not self.history_file.exists():
+            return deque(maxlen=self.maxlen)
+
         try:
-            response = self.client.models.generate_content(
-                model = self.model_name, 
-                contents = data
-            )
-            return response.text
+            data = json.loads(self.history_file.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return deque(data, maxlen=self.maxlen)
+            return deque(maxlen=self.maxlen)
+        
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"Context error is: {e}")
+            return deque(maxlen=self.maxlen)
 
-        except Exception as e:
-            error_detail = getattr(e, "message", str(e))
-            print(
-                f"\r\033[31m[Error API]: {error_detail}\033[0m\n"
-                "\nPlease check your .env configuration (API key, model name, and base URL)."
-            )
+        
+    def save_history(self) -> None:
+        self.history_file.parent.mkdir(parents=True, exist_ok=True)
+        self.history_file.write_text(
+            json.dumps(list(self.history), indent=4, ensure_ascii=False),
+            encoding="utf-8"
+        )
 
-class ChatMemory:
-    def __init__(self, filepath="context.json", max_len=20):
-        self.filepath = pathlib.Path(ROOT / filepath)
-        self.max_len = max_len
-        self._history = None
 
-    @property
-    def history(self):
-        if self._history is None:
-            self._history = self._history_load()
-        return self._history
+    def process_text(self, text: str) -> str | None:
+        user_request = {"role": "user", "content": text}
 
-    def _history_load(self):
-        if self.filepath.exists(): 
-            try:
-                with open(self.filepath, "r", encoding='utf-8') as f:
-                    data = json.load(f)
-                    return deque(self.deconvert(data), maxlen=self.max_len)
-                
-            except Exception as e:
-                print(f"The error is: {e}")
-                return deque([], maxlen=self.max_len)
-        else:
-            print(f"File '{self.filepath}' is not found.")
-            self.filepath.touch(exist_ok=True)
-            return deque([], maxlen=self.max_len)
+        response = self.client.chat.completions.create(
+            model=self.llm_model,
+            messages=[
+                {"role": "system", "content": self.instruct}, 
+                *self.history, 
+                user_request
+                ],
+            temperature=0.5
+        )
+
+        assistant_content = response.choices[0].message.content
+
+        self.history.extend([
+            user_request,
+            {"role": "assistant", "content": assistant_content}
+        ])
+
+        return assistant_content
     
-    def save_history(self, data: list) -> None:
-        with open(self.filepath, "w", encoding="utf-8") as f:
-            json.dump(list(data), f, indent=4, ensure_ascii=False)
 
-    def convert(self, data: list) -> list:
-        return [{"role": d.role, "parts": d.parts[0].text} for d in data]
+    def chat(self) -> None:
+        print('Write "exit" for exit.\n')
 
-    def deconvert(self, json_data: list) -> list:
-        deconvert_data = []
-        for item in json_data:
-            content = genai.types.Content(role=item["role"], parts=[genai.types.Part(text=item["parts"])])
-            deconvert_data.append(content)
-        return deconvert_data
+        try: 
+            while True:
+                try: 
+                    user = input("User:\n").strip()
+                except EOFError: 
+                    print("\nExit...")
+                    break
+
+                if user.lower() == "exit":
+                    break
+
+                if not user: 
+                    continue
+
+                try: 
+                    answer = self.process_text(text=user)
+                    print(f"\nModel:\n{answer}\n")
+
+                except Exception as e: 
+                    print(f"\r\033[31m[Error API]: {e}\033[0m\n")
+
+        except KeyboardInterrupt:
+            print("\nExit...")
+
+        finally: 
+            self.save_history()

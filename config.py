@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     service_api_key: SecretStr
 
     llm_model: str
+    base_url: str
 
     model_config = SettingsConfigDict(
         env_file=ENV,
