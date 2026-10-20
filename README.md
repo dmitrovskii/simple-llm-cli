@@ -1,39 +1,99 @@
-# **Gemma AI Helper**
+# **Simple LLM CLI**
 
-A lightweight CLI chat application powered by Google Gemini API. Get your API-key here: [Google AI Studio](https://aistudio.google.com/api-keys)
+A lightweight, terminal-based chat client with persistent conversation memory. Built on top of the official OpenAI Python SDK, it works out of the box with any OpenAI-compatible provider (Google Gemini, OpenAI, Groq, OpenRouter) as well as self-hosted local models (Ollama, vLLM, LM Studio).
 
-## Features
-* **Context Memory:** Maintains conversation flow using `collections.deque` for efficient history management.
-* **Persistent Storage:** Automatically saves chat history to JSON format for future sessions.
-* **Cross-Platform:** Full support for both Windows and Linux.
-* **OS-Standard Paths:** Securely stores API keys in standard directories: `~/.config` for Linux and `AppData/Roaming` for Windows.
-* **OOP Architecture:** Built with clean, Object-Oriented principles to ensure code scalability.
+### Supported Providers & Compatibility
 
-## Tech Stack
-* **Python 3.14+**
-* **Google Generative AI SDK** (Gemma)
-* **JSON** (for local data persistence)
-* **Git** (Conventional Commits style)
+Configure your target provider in `.env` by supplying its base URL, API key, and model identifier:
 
-## Quick Start
-1. **Clone the repo:**
-   `git clone https://github.com/dmitrovskii/gemma-ai-helper.git`
-2. **Create and activate virtual environment**
-   `python -m venv .venv`
-   - Windows: `.venv\Scripts\activate`
-   - Linux: `source .venv/bin/activate`
-3. **Install requirements:**
-   `pip install -r requirements.txt`
-4. **Setup API Key:**
-   Save your API key in key.txt within the configuration paths mentioned above.
-5. **Launch:**
-   `python main.py`
-
-## Roadmap
-- **[ ]** Add data validation via Pydantic.
-- **[ ]** Support for multiple concurrent chat sessions.
-- **[ ]** Implement `asyncio` for non-blocking I/O.
-- **[ ]** Integrate a Vector Database for long-term RAG memory.
+| Provider | Base URL | Example Model |
+| :--- | :--- | :--- |
+| **Google Gemini** | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-3.5-flash-lite` | 
+| **OpenAI** | `https://api.openai.com/v1/chat/completions` | `gpt-5.6-terra` | 
+| **Groq** | `https://api.groq.com/openai/v1/chat/completions` | `openai/gpt-oss-120b` | 
+| **OpenRouter** | `https://openrouter.ai/api/v1/chat/completions` | `meta-llama/llama-3.3-70b-instruct` | 
+| **Ollama (Local)** | `http://localhost:11434/v1` | `llama3.2` | 
 
 ---
-**Author:** Dmitry (@dmitrovskii)
+
+## Features
+- **Sliding Window Memory:** Uses `collections.deque` to maintain recent conversational flow while preventing token bloat.
+- **Atomic State Updates:** Context history updates only upon successful API responses, keeping sessions clean from network failures.
+- **Session Persistence:** Automatically saves and restores conversation history (`history.json`) across application restarts.
+- **Customizable Persona:** Automatically generates `instruction.txt` on first launch for custom system prompts and constraints.
+- **Robust Configuration:** Powered by `pydantic-settings` for type-safe environment variable parsing and secure key handling.
+- **Cross-Platform:** Works seamlessly across Linux, macOS, and Windows.
+
+---
+
+## Tech Stack
+- **Python 3.14+**
+- **OpenAI Python SDK**
+- **Pydantic Settings**
+- **Standard Library:** `collections.deque`, `pathlib.Path`, `json`
+
+---
+
+## Quick Start
+
+### 1. Clone the repository
+   ``` bash
+   git clone https://github.com/dmitrovskii/simple-llm-cli.git
+   cd simple-llm-cli
+   ```
+### 2. Create and activate a virtual environment
+
+   ``` bash
+   # Create virtual environment
+   python -m venv .venv
+
+   # Activate (Linux / macOS)
+   source .venv/bin/activate
+
+   # Activate (Windows)
+   .venv\Scripts\activate
+   ```
+### 3. Install dependencies
+   ```
+   pip install -r requirements.txt
+   ```
+
+### 4. Configure environment variables
+   Copy the example environment file and specify your API tokens, model 
+   ``` bash
+   cp .env.example .env
+   ```
+
+   Open .env in any editor and set:
+
+   ``` bash
+   LLM_MODEL="gemini-3.5-flash-lite"
+   SERVICE_API_KEY="your_api_key"
+   BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
+   ```
+
+   > **Using Ollama?** Set BASE_URL="http://localhost:11434/v1" and pass any arbitrary string (e.g., ollama) as SERVICE_API_KEY
+
+### 5. Launch
+   ```
+   python main.py
+   ```
+   Type exit or press Ctrl+C to quit and save the session.
+
+---
+
+## Project Structure
+``` bash
+simple-llm-cli/
+├── content/               # Auto-generated runtime data (ignored by git)
+│   ├── history.json       # Persisted sliding-window chat history
+│   └── instruction.txt    # System instructions / assistant persona
+├── config.py              # Pydantic Settings configuration loader
+├── engine.py              # Core ChatSession manager & CLI loop
+├── main.py                # Composition root & entry point
+└── requirements.txt
+```
+---
+## Author & License
+* **Author:** @dmitrovskii
+* **License:** MIT License
